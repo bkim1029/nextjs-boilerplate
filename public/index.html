@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDLXLIFF Translator - Claude API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        .segment-row:hover {
+            background-color: #f3f4f6;
+            transition: background-color 0.2s;
+        }
+        .progress-segment {
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg p-4">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="glass-effect rounded-2xl p-8 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">SDLXLIFF Translator</h1>
+            <p class="text-gray-600">Claude API를 활용한 컨텍스트 기반 번역 도구</p>
+        </div>
+
+        <!-- API Configuration -->
+        <div class="glass-effect rounded-2xl p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">API 설정</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">액세스 비밀번호</label>
+                    <input type="password" id="accessPassword" placeholder="개인 액세스 비밀번호 입력" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">API 엔드포인트</label>
+                    <input type="text" id="apiEndpoint" placeholder="/api/translate (Vercel 배포 후 수정)" 
+                        value="/api/translate"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+            </div>
+            <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+                <p class="text-sm text-blue-800">
+                    <strong>보안 안내:</strong> 이 앱은 서버리스 백엔드를 통해 API 키를 안전하게 보호합니다. 
+                    액세스 비밀번호는 서버에서 검증되며, Claude API 키는 클라이언트에 노출되지 않습니다.
+                </p>
+            </div>
+        </div>
+
+        <!-- File Upload Area -->
+        <div class="glass-effect rounded-2xl p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">파일 업로드</h2>
+            <div id="dropZone" 
+                class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-purple-500 transition-colors cursor-pointer">
+                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p class="text-gray-600 mb-2">SDLXLIFF 파일을 드래그하거나 클릭하여 선택하세요</p>
+                <input type="file" id="fileInput" accept=".sdlxliff" class="hidden">
+                <button onclick="document.getElementById('fileInput').click()" 
+                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    파일 선택
+                </button>
+            </div>
+            <div id="fileInfo" class="mt-4 hidden">
+                <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                    <div class="flex items-center">
+                        <svg class="h-5 w-5 text-green-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span id="fileName" class="text-green-800 font-medium"></span>
+                    </div>
+                    <button onclick="removeFile()" class="text-red-600 hover:text-red-800">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Translation Settings -->
+        <div class="glass-effect rounded-2xl p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">번역 설정</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">컨텍스트 범위</label>
+                    <select id="contextRange" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="10">앞뒤 10개 세그먼트</option>
+                        <option value="20" selected>앞뒤 20개 세그먼트</option>
+                        <option value="30">앞뒤 30개 세그먼트</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">번역 모드</label>
+                    <select id="translationMode" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="quality">품질 우선</option>
+                        <option value="balanced" selected>균형</option>
+                        <option value="speed">속도 우선</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">배치 크기</label>
+                    <select id="batchSize" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                        <option value="1">세그먼트별 처리</option>
+                        <option value="5" selected>5개씩 배치 처리</option>
+                        <option value="10">10개씩 배치 처리</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="glass-effect rounded-2xl p-6 mb-6">
+            <div class="flex flex-wrap gap-4">
+                <button id="startBtn" onclick="startTranslation()" 
+                    class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center">
+                    <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    번역 시작
+                </button>
+                <button id="pauseBtn" onclick="pauseTranslation()" disabled
+                    class="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center">
+                    <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    일시정지
+                </button>
+                <button id="downloadBtn" onclick="downloadResult()" disabled
+                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center">
+                    <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    결과 다운로드
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div id="progressSection" class="glass-effect rounded-2xl p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">진행 상황</h2>
+            <div class="mb-4">
+                <div class="flex justify-between text-sm text-gray-600 mb-2">
+                    <span id="progressText">0 / 0 세그먼트 완료</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div id="progressBar" class="progress-segment bg-gradient-to-r from-purple-600 to-blue-600 h-3 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+            <div id="currentSegment" class="p-4 bg-yellow-50 rounded-lg hidden">
+                <p class="text-sm font-medium text-yellow-800 mb-2">현재 번역 중:</p>
+                <p id="currentText" class="text-gray-700"></p>
+            </div>
+        </div>
+
+        <!-- Segments Table -->
+        <div id="segmentsSection" class="glass-effect rounded-2xl p-6 hidden">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">세그먼트 목록</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-200">
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">ID</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">원문 (English)</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">번역 (한국어)</th>
+                            <th class="text-center py-3 px-4 font-medium text-gray-700">상태</th>
+                        </tr>
+                    </thead>
+                    <tbody id="segmentsTableBody">
+                        <!-- Segments will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let fileContent = null;
+        let segments = [];
+        let translatedSegments = [];
+        let isTranslating = false;
+        let isPaused = false;
+        let currentIndex = 0;
+
+        // File handling
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-purple-500', 'bg-purple-50');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-purple-500', 'bg-purple-50');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-purple-500', 'bg-purple-50');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.sdlxliff')) {
+                alert('SDLXLIFF 파일만 업로드 가능합니다.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                fileContent = e.target.result;
+                parseSDLXLIFF(fileContent);
+                
+                // Show file info
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileInfo').classList.remove('hidden');
+                document.getElementById('startBtn').disabled = false;
+            };
+            reader.readAsText(file);
+        }
+
+        function removeFile() {
+            fileContent = null;
+            segments = [];
+            document.getElementById('fileInfo').classList.add('hidden');
+            document.getElementById('segmentsSection').classList.add('hidden');
+            document.getElementById('progressSection').classList.add('hidden');
+            document.getElementById('startBtn').disabled = true;
+            fileInput.value = '';
+        }
+
+        function parseSDLXLIFF(content) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(content, 'text/xml');
+            
+            segments = [];
+            const transUnits = xmlDoc.getElementsByTagName('trans-unit');
+            
+            for (let i = 0; i < transUnits.length; i++) {
+                const unit = transUnits[i];
+                const id = unit.getAttribute('id');
+                const source = unit.querySelector('source')?.textContent || '';
+                const target = unit.querySelector('target')?.textContent || '';
+                
+                segments.push({
+                    id: id,
+                    index: i + 1,
+                    source: source,
+                    target: target,
+                    originalTarget: target,
+                    status: target ? 'existing' : 'pending'
+                });
+            }
+            
+            displaySegments();
+        }
+
+        function displaySegments() {
+            const tbody = document.getElementById('segmentsTableBody');
+            tbody.innerHTML = '';
+            
+            segments.forEach((segment, index) => {
+                const row = document.createElement('tr');
+                row.className = 'segment-row border-b border-gray-100';
+                row.innerHTML = `
+                    <td class="py-3 px-4 text-sm text-gray-600">${segment.index}</td>
+                    <td class="py-3 px-4 text-sm">${escapeHtml(segment.source)}</td>
+                    <td class="py-3 px-4 text-sm" id="target-${index}">${escapeHtml(segment.target)}</td>
+                    <td class="py-3 px-4 text-center">
+                        <span id="status-${index}" class="inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusClass(segment.status)}">
+                            ${getStatusText(segment.status)}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            document.getElementById('segmentsSection').classList.remove('hidden');
+        }
+
+        function getStatusClass(status) {
+            switch(status) {
+                case 'existing': return 'bg-gray-100 text-gray-800';
+                case 'pending': return 'bg-yellow-100 text-yellow-800';
+                case 'translating': return 'bg-blue-100 text-blue-800 pulse';
+                case 'completed': return 'bg-green-100 text-green-800';
+                case 'error': return 'bg-red-100 text-red-800';
+                default: return 'bg-gray-100 text-gray-800';
+            }
+        }
+
+        function getStatusText(status) {
+            switch(status) {
+                case 'existing': return '기존 번역';
+                case 'pending': return '대기 중';
+                case 'translating': return '번역 중...';
+                case 'completed': return '완료';
+                case 'error': return '오류';
+                default: return '알 수 없음';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function startTranslation() {
+            const password = document.getElementById('accessPassword').value;
+            if (!password) {
+                alert('액세스 비밀번호를 입력해주세요.');
+                return;
+            }
+
+            if (!fileContent) {
+                alert('파일을 먼저 업로드해주세요.');
+                return;
+            }
+
+            isTranslating = true;
+            isPaused = false;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('pauseBtn').disabled = false;
+            document.getElementById('progressSection').classList.remove('hidden');
+
+            const contextRange = parseInt(document.getElementById('contextRange').value);
+            const batchSize = parseInt(document.getElementById('batchSize').value);
+            const mode = document.getElementById('translationMode').value;
+
+            // Filter segments that need translation
+            const segmentsToTranslate = segments.filter(s => !s.target || s.status === 'pending');
+            
+            for (let i = 0; i < segmentsToTranslate.length; i += batchSize) {
+                if (isPaused) {
+                    break;
+                }
+
+                const batch = segmentsToTranslate.slice(i, i + batchSize);
+                await translateBatch(batch, contextRange, password, mode);
+                
+                updateProgress(i + batch.length, segmentsToTranslate.length);
+            }
+
+            if (!isPaused) {
+                completeTranslation();
+            }
+        }
+
+        async function translateBatch(batch, contextRange, password, mode) {
+            for (const segment of batch) {
+                if (isPaused) break;
+                
+                const index = segments.findIndex(s => s.id === segment.id);
+                updateSegmentStatus(index, 'translating');
+                
+                // Get context
+                const contextBefore = segments.slice(Math.max(0, index - contextRange), index);
+                const contextAfter = segments.slice(index + 1, Math.min(segments.length, index + contextRange + 1));
+                
+                try {
+                    // Simulate API call (replace with actual API endpoint)
+                    const translation = await callTranslationAPI(
+                        segment.source,
+                        contextBefore,
+                        contextAfter,
+                        password,
+                        mode
+                    );
+                    
+                    segments[index].target = translation;
+                    updateSegmentStatus(index, 'completed');
+                    document.getElementById(`target-${index}`).textContent = translation;
+                } catch (error) {
+                    console.error('Translation error:', error);
+                    updateSegmentStatus(index, 'error');
+                }
+            }
+        }
+
+        async function callTranslationAPI(text, contextBefore, contextAfter, password, mode) {
+            // This is a placeholder for the actual API call
+            // In production, this would call your Vercel API endpoint
+            
+            // Simulate API delay
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Return mock translation for demo
+            return `[번역됨] ${text}`;
+            
+            /* Actual API call would look like:
+            const response = await fetch('/api/translate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    password,
+                    text,
+                    contextBefore: contextBefore.map(s => ({ source: s.source, target: s.target })),
+                    contextAfter: contextAfter.map(s => ({ source: s.source, target: s.target })),
+                    mode
+                })
+            });
+            
+            const data = await response.json();
+            return data.translation;
+            */
+        }
+
+        function updateSegmentStatus(index, status) {
+            segments[index].status = status;
+            const statusEl = document.getElementById(`status-${index}`);
+            statusEl.className = `inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusClass(status)}`;
+            statusEl.textContent = getStatusText(status);
+            
+            if (status === 'translating') {
+                document.getElementById('currentSegment').classList.remove('hidden');
+                document.getElementById('currentText').textContent = segments[index].source;
+            }
+        }
+
+        function updateProgress(completed, total) {
+            const percent = Math.round((completed / total) * 100);
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').textContent = `${completed} / ${total} 세그먼트 완료`;
+            document.getElementById('progressPercent').textContent = `${percent}%`;
+        }
+
+        function pauseTranslation() {
+            isPaused = true;
+            document.getElementById('pauseBtn').disabled = true;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').textContent = '계속하기';
+        }
+
+        function completeTranslation() {
+            isTranslating = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').textContent = '번역 시작';
+            document.getElementById('pauseBtn').disabled = true;
+            document.getElementById('downloadBtn').disabled = false;
+            document.getElementById('currentSegment').classList.add('hidden');
+            
+            alert('번역이 완료되었습니다!');
+        }
+
+        function downloadResult() {
+            if (!fileContent) return;
+            
+            // Parse and update the XML
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(fileContent, 'text/xml');
+            const transUnits = xmlDoc.getElementsByTagName('trans-unit');
+            
+            segments.forEach((segment, index) => {
+                if (segment.target && segment.target !== segment.originalTarget) {
+                    const unit = transUnits[index];
+                    const targetEl = unit.querySelector('target mrk');
+                    if (targetEl) {
+                        targetEl.textContent = segment.target;
+                    }
+                }
+            });
+            
+            // Serialize and download
+            const serializer = new XMLSerializer();
+            const updatedContent = serializer.serializeToString(xmlDoc);
+            
+            const blob = new Blob([updatedContent], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'translated_' + document.getElementById('fileName').textContent;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
